@@ -311,6 +311,53 @@ gameOver:
     mov [currentFile], offset endfile
     call showbmp 
 
+    ; -----------------------------------------
+    ; Print Final Wave Score on Game Over Screen
+    ; -----------------------------------------
+    mov ah, 2
+    mov bh, 0
+    mov dh, 12          ; Row 12 (Middle height vertically)
+    mov dl, 4           ; Column 4 (Left side horizontally)
+    int 10h
+
+    mov bl, 14          ; Yellow text (14)
+    mov ah, 2
+    mov dl, 'W'
+    int 21h
+    mov dl, 'A'
+    int 21h
+    mov dl, 'V'
+    int 21h
+    mov dl, 'E'
+    int 21h
+    mov dl, 'S'
+    int 21h
+    mov dl, ':'
+    int 21h
+    mov dl, ' '
+    int 21h
+
+    xor ax, ax
+    mov al, [WAVE_LEVEL]
+    mov cl, 10          ; We divide using CL this time, so we don't overwrite BL!
+    div cl              
+    
+    push ax             
+    add al, '0'         
+    mov dl, al
+    mov bl, 14          ; Re-apply Yellow color before printing digit
+    mov ah, 2
+    int 21h
+    
+    pop ax              
+    mov al, ah          
+    add al, '0'         
+    mov dl, al
+    mov bl, 14          ; Re-apply Yellow color before printing digit
+    mov ah, 2
+    int 21h
+    ; -----------------------------------------
+
 waitForGameOverKey:
     call pollAudio      ; Keep streaming music while waiting!
 
