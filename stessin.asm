@@ -68,9 +68,11 @@ arenaMaxY   dw 150
 ; --------------------------
 ; Attack & Wave Variables
 ; --------------------------
+
 waveTimer   dw 0        
 isBreak     db 0        ; 0 = Attacking, 1 = Break Time
 WAVE_LEVEL  db 1        
+BEST_WAVE   db 1        
 
 MAX_BULLETS    equ 10
 bulX           dw MAX_BULLETS dup (0)
@@ -303,6 +305,13 @@ doMoveDown:
 gameOver:
     mov sp, [baseSP]
 
+    ; --- CHECK FOR NEW HIGH SCORE ---
+    mov al, [WAVE_LEVEL]
+    cmp al, [BEST_WAVE]
+    jle skipHighScore       ; If current wave is LESS or EQUAL to best, skip updating
+    mov [BEST_WAVE], al     ; NEW HIGH SCORE! Save it to BEST_WAVE
+skipHighScore:
+
     ; --- Switch to Game Over music! ---
     mov dx, offset deadSnd
     call playStreamingAudio
@@ -316,11 +325,11 @@ gameOver:
     ; -----------------------------------------
     mov ah, 2
     mov bh, 0
-    mov dh, 12          ; Row 12 (Middle height vertically)
-    mov dl, 4           ; Column 4 (Left side horizontally)
+    mov dh, 12          ; Row 12
+    mov dl, 4           ; Column 4
     int 10h
 
-    mov bl, 14          ; Yellow text (14)
+    mov bl, 14          ; Yellow text
     mov ah, 2
     mov dl, 'W'
     int 21h
@@ -339,13 +348,13 @@ gameOver:
 
     xor ax, ax
     mov al, [WAVE_LEVEL]
-    mov cl, 10          ; We divide using CL this time, so we don't overwrite BL!
+    mov cl, 10          
     div cl              
     
     push ax             
     add al, '0'         
     mov dl, al
-    mov bl, 14          ; Re-apply Yellow color before printing digit
+    mov bl, 14          
     mov ah, 2
     int 21h
     
@@ -353,7 +362,51 @@ gameOver:
     mov al, ah          
     add al, '0'         
     mov dl, al
-    mov bl, 14          ; Re-apply Yellow color before printing digit
+    mov bl, 14          
+    mov ah, 2
+    int 21h
+
+    ; -----------------------------------------
+    ; Print BEST Wave Score 
+    ; -----------------------------------------
+    mov ah, 2
+    mov bh, 0
+    mov dh, 14          ; Row 14 (Two lines exactly under the current score)
+    mov dl, 4           ; Column 4
+    int 10h
+
+    mov bl, 14          ; Yellow text
+    mov ah, 2
+    mov dl, 'B'
+    int 21h
+    mov dl, 'E'
+    int 21h
+    mov dl, 'S'
+    int 21h
+    mov dl, 'T'
+    int 21h
+    mov dl, ':'
+    int 21h
+    mov dl, ' '
+    int 21h
+
+    xor ax, ax
+    mov al, [BEST_WAVE] ; <--- Use the BEST_WAVE variable this time!
+    mov cl, 10          
+    div cl              
+    
+    push ax             
+    add al, '0'         
+    mov dl, al
+    mov bl, 14          
+    mov ah, 2
+    int 21h
+    
+    pop ax              
+    mov al, ah          
+    add al, '0'         
+    mov dl, al
+    mov bl, 14          
     mov ah, 2
     int 21h
     ; -----------------------------------------
