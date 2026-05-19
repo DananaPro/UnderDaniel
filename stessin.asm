@@ -70,6 +70,7 @@ arenaMaxY   dw 150
 ; --------------------------
 waveTimer   dw 0        
 isBreak     db 0        ; 0 = Attacking, 1 = Break Time
+WAVE_LEVEL  db 1        
 
 MAX_BULLETS    equ 10
 bulX           dw MAX_BULLETS dup (0)
@@ -130,7 +131,6 @@ start:
     call showbmp
 
     ; --- 2. MENU SELECTION ---
-; --- 2. MENU SELECTION ---
 waitForStartKey:
     call pollAudio
 
@@ -210,6 +210,7 @@ mainLoop:
     mov [isBreak], 1
     mov [waveTimer], 0  
     call eraseAllBullets    
+	inc [WAVE_LEVEL]
     jmp checkInput
 
 handleBreak:
@@ -330,6 +331,7 @@ waitForGameOverKey:
     
     ; --- RESTART LOGIC ---
     mov [hp], 20       ; Reset health
+	mov [WAVE_LEVEL], 1; Reset Wave
     mov [waveTimer], 0 ; Reset timer
     mov [isBreak], 0   ; Ensure we aren't in break mode
     
@@ -538,35 +540,84 @@ endp handleAllBullets
 proc drawHealthBar
     push ax bx dx
 
-    ; 1. Set Cursor Position (Row 21, Column 12)
-    mov dh, 21          
-    mov dl, 12          
-    mov bh, 0           
+    ; -----------------------------------------
+    ; 1. Print the Wave Counter
+    ; -----------------------------------------
+    ; Set Cursor Position
     mov ah, 2
+    mov bh, 0
+    mov dh, 21          ; Row 21 (Aligned with HP text)
+    mov dl, 27          ; Column 27 (To the right side)
     int 10h
 
-    ; 2. Extract and Print Current HP (Manual 2-Digit Printing)
-    xor ax, ax
-    mov al, [hp]        ; al = 20
+    ; Set text color to Light Green (10) for VGA mode text
     mov bl, 10
-    div bl              ; al = 2 (Tens), ah = 0 (Ones)
+
+    ; Print "Wave: " manually to bypass DOS string bugs
+    mov ah, 2
+    mov dl, 'W'
+    int 21h
+    mov dl, 'a'
+    int 21h
+    mov dl, 'v'
+    int 21h
+    mov dl, 'e'
+    int 21h
+    mov dl, ':'
+    int 21h
+    mov dl, ' '
+    int 21h
+
+    ; Print Current Wave Number (Manually divided, just like HP)
+    xor ax, ax
+    mov al, [WAVE_LEVEL]
+    mov bl, 10          ; Divide by 10 (and keeps text color Light Green!)
+    div bl              
     
-    push ax             ; Save the ones digit
+    push ax             
     
-    ; Print Tens Digit
-    add al, '0'         ; Convert 2 to '2'
+    add al, '0'         ; Tens Digit
     mov dl, al
     mov ah, 2
     int 21h
     
-    pop ax              ; Get the ones digit back
-    mov al, ah          ; Move remainder (ones) to al
-    add al, '0'         ; Convert 0 to '0'
+    pop ax              
+    mov al, ah          
+    add al, '0'         ; Ones Digit
     mov dl, al
     mov ah, 2
     int 21h
 
-    ; 3. Print the static "/20 HP" string
+    ; -----------------------------------------
+    ; 2. Print Current HP Text
+    ; -----------------------------------------
+    mov ah, 2
+    mov bh, 0
+    mov dh, 21          
+    mov dl, 12          
+    int 10h
+
+    ; Extract and Print Current HP 
+    xor ax, ax
+    mov al, [hp]        
+    mov bl, 10
+    div bl              
+    
+    push ax             
+    
+    add al, '0'         
+    mov dl, al
+    mov ah, 2
+    int 21h
+    
+    pop ax              
+    mov al, ah          
+    add al, '0'         
+    mov dl, al
+    mov ah, 2
+    int 21h
+
+    ; Print the static "/20 HP" string
     mov ah, 2
     mov dl, '/'
     int 21h
@@ -581,7 +632,9 @@ proc drawHealthBar
     mov dl, 'P'
     int 21h
 
-    ; 4. Draw the Visual Bar Background (Gray)
+    ; -----------------------------------------
+    ; 3. Draw the Visual Bar Background (Gray)
+    ; -----------------------------------------
     mov [x], 120
     mov [y], 180
     mov [wid], 80
@@ -589,13 +642,15 @@ proc drawHealthBar
     mov [color], 8      
     call drawRectangle
 
-    ; 5. Draw the Red Health Fill
+    ; -----------------------------------------
+    ; 4. Draw the Red Health Fill
+    ; -----------------------------------------
     xor ax, ax
     mov al, [hp]
     cmp al, 0
     jle skipFill        
     
-    mov bx, 4           ; HP * 4 = Bar Width
+    mov bx, 4           
     mul bx              
     mov [wid], ax
     mov [color], 63     ; Bright Red
