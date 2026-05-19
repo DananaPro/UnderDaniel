@@ -86,14 +86,14 @@ hpMsg          db 'HP: $'
 ; File Variables
 ; --------------------------
 startfile       db 'intro.bmp',0 
-endfile         db 'gameover.bmp',0 
+endfile         db 'gameover2.bmp',0 
 gamebg          db 'danbg.bmp',0
 instfile        db 'lore.bmp',0     
 
 ; --- Audio Variables ---
 menuSnd         db 'menu.raw',0
 batlSnd         db 'batl.raw',0   
-deadSnd         db 'dead.raw',0    ; <--- ADD THIS LINE!
+deadSnd         db 'dead.raw',0
 
 baseSP      	dw 0        ; Saves a clean state of our memory stack
 filehandle      dw ? 
