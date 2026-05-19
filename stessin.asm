@@ -86,7 +86,7 @@ hpMsg          db 'HP: $'
 ; File Variables
 ; --------------------------
 startfile       db 'intro.bmp',0 
-endfile         db 'gameover2.bmp',0 
+endfile         db 'gover2.bmp',0 
 gamebg          db 'danbg.bmp',0
 instfile        db 'lore.bmp',0     
 
