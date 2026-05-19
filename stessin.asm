@@ -543,17 +543,13 @@ proc drawHealthBar
     ; -----------------------------------------
     ; 1. Print the Wave Counter
     ; -----------------------------------------
-    ; Set Cursor Position
     mov ah, 2
     mov bh, 0
-    mov dh, 21          ; Row 21 (Aligned with HP text)
-    mov dl, 27          ; Column 27 (To the right side)
+    mov dh, 22          ; Row 22 (Perfectly aligned with HP text)
+    mov dl, 27          
     int 10h
 
-    ; Set text color to Light Green (10) for VGA mode text
-    mov bl, 10
-
-    ; Print "Wave: " manually to bypass DOS string bugs
+    mov bl, 10          ; Light Green
     mov ah, 2
     mov dl, 'W'
     int 21h
@@ -568,22 +564,18 @@ proc drawHealthBar
     mov dl, ' '
     int 21h
 
-    ; Print Current Wave Number (Manually divided, just like HP)
     xor ax, ax
     mov al, [WAVE_LEVEL]
-    mov bl, 10          ; Divide by 10 (and keeps text color Light Green!)
+    mov bl, 10          
     div bl              
-    
     push ax             
-    
-    add al, '0'         ; Tens Digit
+    add al, '0'         
     mov dl, al
     mov ah, 2
     int 21h
-    
     pop ax              
     mov al, ah          
-    add al, '0'         ; Ones Digit
+    add al, '0'         
     mov dl, al
     mov ah, 2
     int 21h
@@ -593,23 +585,19 @@ proc drawHealthBar
     ; -----------------------------------------
     mov ah, 2
     mov bh, 0
-    mov dh, 21          
-    mov dl, 12          
+    mov dh, 22          ; Row 22
+    mov dl, 2           ; Shifted far left so it doesn't hit the graphics bar
     int 10h
 
-    ; Extract and Print Current HP 
     xor ax, ax
     mov al, [hp]        
-    mov bl, 10
+    mov bl, 10          ; Light Green Text
     div bl              
-    
     push ax             
-    
     add al, '0'         
     mov dl, al
     mov ah, 2
     int 21h
-    
     pop ax              
     mov al, ah          
     add al, '0'         
@@ -617,7 +605,6 @@ proc drawHealthBar
     mov ah, 2
     int 21h
 
-    ; Print the static "/20 HP" string
     mov ah, 2
     mov dl, '/'
     int 21h
@@ -633,10 +620,10 @@ proc drawHealthBar
     int 21h
 
     ; -----------------------------------------
-    ; 3. Draw the Visual Bar Background (Gray)
+    ; 3. Draw the Visual Health Background
     ; -----------------------------------------
-    mov [x], 120
-    mov [y], 180
+    mov [x], 100        ; Moved to X=100 so it sits nicely next to the text
+    mov [y], 178        ; Y=178 centers the rectangle perfectly on Row 22 text
     mov [wid], 80
     mov [height], 5
     mov [color], 8      
@@ -648,19 +635,86 @@ proc drawHealthBar
     xor ax, ax
     mov al, [hp]
     cmp al, 0
-    jle skipFill        
+    jle drawTimerSection        
     
     mov bx, 4           
     mul bx              
     mov [wid], ax
-    mov [color], 63     ; Bright Red
+    mov [color], 63     ; Bright Red Health
     call drawRectangle
 
-skipFill:
+drawTimerSection:
+    ; -----------------------------------------
+    ; 5. Print "TIME" Text
+    ; -----------------------------------------
+    mov ah, 2
+    mov bh, 0
+    mov dh, 24          ; Row 24 (Sits exactly under HP text)
+    mov dl, 2           ; Shifted far left
+    int 10h
+
+    mov bl, 10          ; Light Green to match HP text
+
+    mov ah, 2
+    mov dl, 'T'
+    int 21h
+    mov dl, 'I'
+    int 21h
+    mov dl, 'M'
+    int 21h
+    mov dl, 'E'
+    int 21h
+
+    ; -----------------------------------------
+    ; 6. Draw Timer Bar Background
+    ; -----------------------------------------
+    mov [x], 100
+    mov [y], 194        ; Y=194 centers it perfectly on Row 24 text
+    mov [wid], 84       
+    mov [height], 5
+    mov [color], 8      ; Gray background
+    call drawRectangle
+
+    ; -----------------------------------------
+    ; 7. Calculate & Draw Shrinking Timer Fill
+    ; -----------------------------------------
+    cmp [isBreak], 1
+    je calcBreakTimer
+
+    ; -- Attack Phase -- 
+    mov ax, [waveTimer] 
+    mov bl, 5           
+    div bl              
+    
+    mov dl, 84
+    sub dl, al          
+    xor dh, dh
+    mov [wid], dx
+    mov [color], 63     ; CHANGED TO 63: Bright Red to perfectly match Health!
+    jmp doTimerFill
+
+calcBreakTimer:
+    ; -- Break Phase -- 
+    mov ax, [waveTimer] 
+    mov bx, 7
+    mul bx              
+    mov bx, 10
+    div bx              
+    
+    mov dx, 84
+    sub dx, ax          
+    mov [wid], dx
+    mov [color], 63
+
+doTimerFill:
+    cmp [wid], 0
+    jle skipTimerFill
+    call drawRectangle
+
+skipTimerFill:
     pop dx bx ax
     ret
 endp drawHealthBar
-
 ; --------------------------
 ; Include Procedures
 ; --------------------------
