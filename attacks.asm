@@ -354,7 +354,7 @@ proc spawnUpBullet
     xor dx, dx
     mov bx, [arenaMaxX]
     sub bx, [arenaMinX]
-    sub bx, 7
+    sub bx, 10
     div bx
     add dx, [arenaMinX]
     mov [bulletX], dx

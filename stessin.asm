@@ -453,7 +453,7 @@ spookyMoveUp:
 
     ; 6. CHECK IF AT DOOR (Y=70)
     cmp [bowlY], 70              
-    jle spookyDoorReached   
+    jle spookyDoorReached
     jmp spookyLoop
 
 spookyDoorReached:
