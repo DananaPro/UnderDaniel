@@ -8,33 +8,59 @@ proc pickAttackPattern
     call getRandom
     mov ax, [randNum]
     
-    ; --- THE FIX: Break the RNG Sync Loop! ---
-    ; Add the player's unpredictable X position and the current wave level
-    ; to scramble the math so the modulo doesn't get stuck in a loop.
+    ; Break the RNG Sync Loop
     add ax, [bowlX]
     xor ah, ah
     add al, [WAVE_LEVEL]
     
     xor dx, dx
-    mov bx, 3           ; Divide the scrambled number by 3
-    div bx              ; The remainder (dx) will be 0, 1, or 2
+    mov bx, 7           ; Now dividing by 7 for 7 different wave types!
+    div bx              ; The remainder (dx) will be 0 to 6
+
+    ; Reset all counters to 0 first (Safest way to prevent leftovers)
+    mov [activeDown], 0
+    mov [activeUp], 0
+    mov [activeLeft], 0
+    mov [activeRight], 0
 
     cmp dl, 0
-    je patternZero
+    je pZero
     cmp dl, 1
-    je patternOne
+    je pOne
+    cmp dl, 2
+    je pTwo
+    cmp dl, 3
+    je pThree
+    cmp dl, 4
+    je pFour
+    cmp dl, 5
+    je pFive
 
-patternTwo:             ; COMBO (5 Falling, 5 Rising)
+pSix:                   ; PATTERN 6: CHAOS (3 Down, 3 Up, 2 Left, 2 Right)
+    mov [activeDown], 3
+    mov [activeUp], 3
+    mov [activeLeft], 2
+    mov [activeRight], 2
+    ret
+pZero:                  ; PATTERN 0: ONLY FALLING
+    mov [activeDown], 10
+    ret
+pOne:                   ; PATTERN 1: ONLY RISING
+    mov [activeUp], 10
+    ret
+pTwo:                   ; PATTERN 2: VERTICAL COMBO
     mov [activeDown], 5
     mov [activeUp], 5
     ret
-patternZero:            ; ONLY FALLING (10 Falling, 0 Rising)
-    mov [activeDown], 10
-    mov [activeUp], 0
+pThree:                 ; PATTERN 3: ONLY LEFT-TO-RIGHT
+    mov [activeLeft], 10
     ret
-patternOne:             ; ONLY RISING (0 Falling, 10 Rising)
-    mov [activeDown], 0
-    mov [activeUp], 10
+pFour:                  ; PATTERN 4: ONLY RIGHT-TO-LEFT
+    mov [activeRight], 10
+    ret
+pFive:                  ; PATTERN 5: HORIZONTAL COMBO
+    mov [activeLeft], 5
+    mov [activeRight], 5
     ret
 endp pickAttackPattern
 
@@ -352,16 +378,22 @@ proc beepSound
     or al, 3
     out 61h, al
 
-    ; 3. Hit-stop delay that KEEPS AUDIO ALIVE
+    ; 3. Hit-stop delay with SAFETY TIMEOUT
     mov ax, 40h
     mov es, ax
     mov bx, 6Ch
     mov eax, es:[bx]    ; Get current BIOS tick
+    mov cx, 65000       ; <--- SAFETY COUNTER: Prevents infinite freeze!
+    
 wait_tick:
-    call pollAudio      ; <--- THE FIX: Feed the audio buffer while frozen!
+    call pollAudio      
     cmp eax, es:[bx]
-    je wait_tick        ; Loop until the hardware tick changes
+    jne end_beep        ; If tick changed normally, jump to end!
+    
+    dec cx              ; Subtract 1 from safety counter
+    jnz wait_tick       ; Keep waiting ONLY if cx is not 0
 
+end_beep:
     ; 4. Turn OFF Speaker
     in al, 61h
     and al, 0FCh
@@ -370,3 +402,262 @@ wait_tick:
     popa
     ret
 endp beepSound
+
+; =========================================
+; LEFT-TO-RIGHT BULLETS
+; =========================================
+
+proc spawnLeftBullet
+    ; 1. Start safely INSIDE the left wall
+    mov ax, [arenaMinX]
+    add ax, 8
+    mov [bulletX], ax
+
+    ; 2. Random Y between Top and Bottom
+    call getRandom
+    mov ax, [randNum]
+    xor dx, dx
+    mov bx, [arenaMaxY]
+    sub bx, [arenaMinY]
+    sub bx, 5
+    div bx
+    add dx, [arenaMinY]
+    mov [bulletY], dx
+
+    ; 3. Random Delay
+    call getRandom
+    mov ax, [randNum]
+    and ax, 25          
+    ret
+endp spawnLeftBullet
+
+proc spawnAllLeftBullets
+    push cx si
+    mov cx, [activeLeft]
+    cmp cx, 0
+    je endSpawnLeft
+    mov si, 0
+spawnLeftLoop:
+    call spawnLeftBullet    
+    mov [leftBulDelay + si], ax
+    mov ax, [bulletX]
+    mov [leftBulX + si], ax
+    mov ax, [bulletY]
+    mov [leftBulY + si], ax
+    add si, 2
+    loop spawnLeftLoop
+endSpawnLeft:
+    pop si cx
+    ret
+endp spawnAllLeftBullets
+
+proc handleAllLeftBullets
+    push cx si
+    mov cx, [activeLeft]
+    cmp cx, 0
+    je endHandleLeft
+    mov si, 0
+leftBulletLoop:
+    cmp [leftBulDelay + si], 0
+    jbe startMovingRight      
+    dec [leftBulDelay + si]
+    jmp nextLeftBul
+
+startMovingRight:
+    mov ax, [leftBulX + si]
+    mov [bulletX], ax
+    mov ax, [leftBulY + si]
+    mov [bulletY], ax
+
+    call eraseAttack
+
+    ; Move RIGHT (Add speed to X)
+    mov ax, [bulletSpeed] 
+    add [leftBulX + si], ax
+    mov ax, [leftBulX + si]
+    mov [bulletX], ax
+
+    call checkCollision
+    cmp al, 1
+    je resetLeftOne
+	
+	; --- BOUNDARY CHECK ---
+    mov ax, [leftBulX + si]
+    mov bx, [arenaMaxX]
+    sub bx, 8           ; <--- Stop 6 pixels before touching the right wall!
+    cmp ax, bx
+    jge resetLeftOne
+    ; --------------------------
+
+    mov ax, [leftBulX + si]
+    cmp ax, [arenaMaxX]
+    jge resetLeftOne
+
+    call drawAttack
+    jmp nextLeftBul
+
+resetLeftOne:
+    call eraseAttack
+    call spawnLeftBullet    
+    mov [leftBulDelay + si], ax
+    mov ax, [bulletX]
+    mov [leftBulX + si], ax
+    mov ax, [bulletY]
+    mov [leftBulY + si], ax
+
+nextLeftBul:
+    add si, 2
+    loop leftBulletLoop
+endHandleLeft:
+    pop si cx
+    ret
+endp handleAllLeftBullets
+
+proc eraseAllLeftBullets
+    push cx si
+    mov cx, [activeLeft]     
+    cmp cx, 0
+    je endEraseLeft
+    mov si, 0
+eraseLeftLoop:
+    mov ax, [leftBulX + si]
+    mov [bulletX], ax
+    mov ax, [leftBulY + si]
+    mov [bulletY], ax
+    call eraseAttack
+    add si, 2
+    loop eraseLeftLoop
+endEraseLeft:
+    pop si cx
+    ret
+endp eraseAllLeftBullets
+
+
+; =========================================
+; RIGHT-TO-LEFT BULLETS
+; =========================================
+
+proc spawnRightBullet
+    ; 1. Start safely INSIDE the right wall
+    mov ax, [arenaMaxX]
+    sub ax, 8
+    mov [bulletX], ax
+
+    ; 2. Random Y between Top and Bottom
+    call getRandom
+    mov ax, [randNum]
+    xor dx, dx
+    mov bx, [arenaMaxY]
+    sub bx, [arenaMinY]
+    sub bx, 5
+    div bx
+    add dx, [arenaMinY]
+    mov [bulletY], dx
+
+    ; 3. Random Delay
+    call getRandom
+    mov ax, [randNum]
+    and ax, 25          
+    ret
+endp spawnRightBullet
+
+proc spawnAllRightBullets
+    push cx si
+    mov cx, [activeRight]
+    cmp cx, 0
+    je endSpawnRight
+    mov si, 0
+spawnRightLoop:
+    call spawnRightBullet    
+    mov [rightBulDelay + si], ax
+    mov ax, [bulletX]
+    mov [rightBulX + si], ax
+    mov ax, [bulletY]
+    mov [rightBulY + si], ax
+    add si, 2
+    loop spawnRightLoop
+endSpawnRight:
+    pop si cx
+    ret
+endp spawnAllRightBullets
+
+proc handleAllRightBullets
+    push cx si
+    mov cx, [activeRight]
+    cmp cx, 0
+    je endHandleRight
+    mov si, 0
+rightBulletLoop:
+    cmp [rightBulDelay + si], 0
+    jbe startMovingLeft      
+    dec [rightBulDelay + si]
+    jmp nextRightBul
+
+startMovingLeft:
+    mov ax, [rightBulX + si]
+    mov [bulletX], ax
+    mov ax, [rightBulY + si]
+    mov [bulletY], ax
+
+    call eraseAttack
+
+    ; Move LEFT (Subtract speed from X)
+    mov ax, [bulletSpeed] 
+    sub [rightBulX + si], ax
+    mov ax, [rightBulX + si]
+    mov [bulletX], ax
+
+    call checkCollision
+    cmp al, 1
+    je resetRightOne
+	
+; --- BOUNDARY CHECK ---
+    mov ax, [rightBulX + si]
+    mov bx, [arenaMinX]
+    add bx, 8           ; <--- Stop 6 pixels before touching the left wall!
+    cmp ax, bx
+    jle resetRightOne
+    ; --------------------------
+
+    mov ax, [rightBulX + si]
+    cmp ax, [arenaMinX]
+    jle resetRightOne
+
+    call drawAttack
+    jmp nextRightBul
+
+resetRightOne:
+    call eraseAttack
+    call spawnRightBullet    
+    mov [rightBulDelay + si], ax
+    mov ax, [bulletX]
+    mov [rightBulX + si], ax
+    mov ax, [bulletY]
+    mov [rightBulY + si], ax
+
+nextRightBul:
+    add si, 2
+    loop rightBulletLoop
+endHandleRight:
+    pop si cx
+    ret
+endp handleAllRightBullets
+
+proc eraseAllRightBullets
+    push cx si
+    mov cx, [activeRight]     
+    cmp cx, 0
+    je endEraseRight
+    mov si, 0
+eraseRightLoop:
+    mov ax, [rightBulX + si]
+    mov [bulletX], ax
+    mov ax, [rightBulY + si]
+    mov [bulletY], ax
+    call eraseAttack
+    add si, 2
+    loop eraseRightLoop
+endEraseRight:
+    pop si cx
+    ret
+endp eraseAllRightBullets

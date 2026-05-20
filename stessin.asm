@@ -74,18 +74,33 @@ WAVE_LEVEL  db 1
 BEST_WAVE   db 1        
 
 MAX_BULLETS    equ 10
+
 bulX           dw MAX_BULLETS dup (0)
 bulY           dw MAX_BULLETS dup (0)
 bulDelay       dw MAX_BULLETS dup (0)
+
 upBulX         dw MAX_BULLETS dup (0)
 upBulY         dw MAX_BULLETS dup (0)
 upBulDelay     dw MAX_BULLETS dup (0)
-activeDown     dw 10   ; How many falling bullets are currently allowed
-activeUp       dw 0    ; How many rising bullets are currently allowed
+
+leftBulX       dw MAX_BULLETS dup (0)
+leftBulY       dw MAX_BULLETS dup (0)
+leftBulDelay   dw MAX_BULLETS dup (0)
+
+rightBulX      dw MAX_BULLETS dup (0)
+rightBulY      dw MAX_BULLETS dup (0)
+rightBulDelay  dw MAX_BULLETS dup (0)
+
+activeDown     dw 10   
+activeUp       dw 0    
+activeLeft     dw 0
+activeRight    dw 0
 
 bulletX        dw 0        ; Temp variable for drawing logic
 bulletY        dw 0        ; Temp variable for drawing logic
 bulletSpeed    dw 2
+oldHp          db 255      ; Tracks when HP changes
+oldWave        db 255      ; Tracks when Wave changes
 
 hpMsg          db 'HP: $'
 
@@ -196,9 +211,11 @@ startGameImmediately:
 gamestart:           
     mov [baseSP], sp
     call initGame
-	call pickAttackPattern
+    call pickAttackPattern
     call spawnAllBullets
-	call spawnAllUpBullets
+    call spawnAllUpBullets
+    call spawnAllLeftBullets
+    call spawnAllRightBullets
 
 mainLoop:   
     call pollAudio
@@ -209,9 +226,11 @@ mainLoop:
     cmp [isBreak], 1
     je handleBreak
 
-    ; --- ATTACK WAVE ---
+	; --- ATTACK WAVE ---
     call handleAllBullets  
-	call handleAllUpBullets
+    call handleAllUpBullets
+    call handleAllLeftBullets
+    call handleAllRightBullets
     call drawHealthBar
     
     cmp [waveTimer], 420 ; 7 Seconds
@@ -221,6 +240,8 @@ mainLoop:
     mov [waveTimer], 0
     call eraseAllBullets
 	call eraseAllUpBullets
+	call eraseAllLeftBullets
+    call eraseAllRightBullets
 	inc [WAVE_LEVEL]
     jmp checkInput
 
@@ -235,6 +256,8 @@ handleBreak:
 	call pickAttackPattern
     call spawnAllBullets
 	call spawnAllUpBullets
+	call spawnAllLeftBullets
+    call spawnAllRightBullets
      
 checkInput:
     mov ah, 01h
@@ -446,6 +469,9 @@ waitForGameOverKey:
     mov [waveTimer], 0 ; Reset timer
     mov [isBreak], 0   ; Ensure we aren't in break mode
     
+	mov [oldHp], 255   ; Force the UI to redraw on restart
+    mov [oldWave], 255 ; Force the UI to redraw on restart
+	
     ; Jump back up to the routine that handles the background AND the battle music!
     jmp startGameImmediately
     
