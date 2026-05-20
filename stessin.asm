@@ -77,6 +77,12 @@ MAX_BULLETS    equ 10
 bulX           dw MAX_BULLETS dup (0)
 bulY           dw MAX_BULLETS dup (0)
 bulDelay       dw MAX_BULLETS dup (0)
+upBulX         dw MAX_BULLETS dup (0)
+upBulY         dw MAX_BULLETS dup (0)
+upBulDelay     dw MAX_BULLETS dup (0)
+activeDown     dw 10   ; How many falling bullets are currently allowed
+activeUp       dw 0    ; How many rising bullets are currently allowed
+
 bulletX        dw 0        ; Temp variable for drawing logic
 bulletY        dw 0        ; Temp variable for drawing logic
 bulletSpeed    dw 2
@@ -190,7 +196,9 @@ startGameImmediately:
 gamestart:           
     mov [baseSP], sp
     call initGame
+	call pickAttackPattern
     call spawnAllBullets
+	call spawnAllUpBullets
 
 mainLoop:   
     call pollAudio
@@ -203,14 +211,16 @@ mainLoop:
 
     ; --- ATTACK WAVE ---
     call handleAllBullets  
+	call handleAllUpBullets
     call drawHealthBar
     
     cmp [waveTimer], 420 ; 7 Seconds
     jl checkInput       
     
     mov [isBreak], 1
-    mov [waveTimer], 0  
-    call eraseAllBullets    
+    mov [waveTimer], 0
+    call eraseAllBullets
+	call eraseAllUpBullets
 	inc [WAVE_LEVEL]
     jmp checkInput
 
@@ -221,8 +231,10 @@ handleBreak:
     jl checkInput       
 
     mov [isBreak], 0
-    mov [waveTimer], 0  
+    mov [waveTimer], 0
+	call pickAttackPattern
     call spawnAllBullets
+	call spawnAllUpBullets
      
 checkInput:
     mov ah, 01h
