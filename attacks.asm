@@ -1,6 +1,8 @@
-; ========================================================
-; attacks.asm - Complete Physics & Collision Engine
-; ========================================================
+; =========================================
+; attacks.asm
+; Handles bullet generation, movement, 
+; and collision logic.
+; =========================================
 
 proc drawAttack
     mov ax, [bulletX]
@@ -9,7 +11,7 @@ proc drawAttack
     mov [y], ax
     mov [wid], 5
     mov [height], 5
-    mov [color], 15     ; White bullets
+    mov [color], 255    
     call drawRectangle
     ret
 endp drawAttack
@@ -21,7 +23,7 @@ proc eraseAttack
     mov [y], ax
     mov [wid], 5
     mov [height], 5
-    mov [color], 0      ; Black out
+    mov [color], 0      
     call drawRectangle
     ret
 endp eraseAttack
@@ -70,133 +72,37 @@ safe:
 endp checkCollision
 
 proc takeDamage
-    sub [hp], 4
-    cmp [hp], 0
-    jle gameOverJump
+    call eraseAttack    ; Erase the specific bullet that hit the player
+    sub [hp], 4         ; Lose 4 HP per hit (Player has 5 lives total)
+    cmp [hp], 0         ; Check if health reached 0 or less
+    jle gameOverJump    ; If 0, trigger Game Over
     ret
 gameOverJump:
-    pop ax
-    jmp gameOver
+    pop ax              ; Clean the stack (removes the return address from the proc)
+    jmp gameOver        ; Jump to the Game Over routine
 endp takeDamage
 
-proc checkWalls
-    mov ax, [bulletX]
-    cmp ax, 12
-    jle hitWall
-    mov ax, [bulletX]
-    cmp ax, 303
-    jge hitWall
-    mov ax, [bulletY]
-    cmp ax, 12
-    jle hitWall
-    mov ax, [bulletY]
-    cmp ax, 150
-    jge hitWall
-    mov al, 0
-    ret
-hitWall:
-    mov al, 1
-    ret
-endp checkWalls
-
-; --------------------------------------------------------
-; DYNAMIC SPAWNING
-; --------------------------------------------------------
 proc spawnBullet
-    mov ax, 0
-    mov al, [currentWave]
-    and ax, 3
-    cmp ax, 0
-    je spawnBouncing
-    cmp ax, 1
-    je spawnHoming
-    cmp ax, 2
-    je spawnSweeper
-    cmp ax, 3
-    je spawnRain
-
-spawnBouncing:
-    mov [bulletX], 160
-    mov [bulletY], 80
-    call getRandom
-    mov ax, [randNum]
-    and ax, 1
-    cmp ax, 0
-    je setDX_Neg
-    mov ax, 3
-    jmp set_DY_Bounce
-setDX_Neg:
-    mov ax, -3
-set_DY_Bounce:
-    mov [bulDX + si], ax
-
-    call getRandom
-    mov ax, [randNum]
-    and ax, 1
-    cmp ax, 0
-    je setDY_Neg
-    mov ax, 3
-    jmp finalizeSpawn
-setDY_Neg:
-    mov ax, -3
-    jmp finalizeSpawn
-
-spawnHoming:
-    call getRandom
-    mov ax, [randNum]
-    and ax, 1
-    cmp ax, 0
-    je homingLeft
-    mov [bulletX], 300
-    jmp homingY
-homingLeft:
-    mov [bulletX], 15
-homingY:
+    ; 1. Random X (Standard)
     call getRandom
     mov ax, [randNum]
     xor dx, dx
-    mov bx, 130
+    mov bx, [arenaMaxX]
+    sub bx, [arenaMinX]
+    sub bx, 5
     div bx
-    add dx, 15
-    mov [bulletY], dx
-    mov ax, 0
-    mov [bulDX + si], ax
-    mov [bulDY + si], ax
-    jmp finalizeSpawn
-
-spawnSweeper:
-    mov [bulletX], 15
-    call getRandom
-    mov ax, [randNum]
-    xor dx, dx
-    mov bx, 130
-    div bx
-    add dx, 15
-    mov [bulletY], dx
-    mov ax, 5
-    mov [bulDX + si], ax
-    mov ax, 0
-    mov [bulDY + si], ax
-    jmp finalizeSpawn
-
-spawnRain:
-    call getRandom
-    mov ax, [randNum]
-    xor dx, dx
-    mov bx, 280
-    div bx
-    add dx, 15
+    add dx, [arenaMinX]
     mov [bulletX], dx
-    mov [bulletY], 15
-    mov ax, 0
-    mov [bulDX + si], ax
-    mov ax, 4
-    mov [bulDY + si], ax
-    
-finalizeSpawn:
+
+    ; 2. Start at the EXACT top level (arenaMinY)
+    mov ax, [arenaMinY]
+    mov [bulletY], ax
+
+    ; 3. Generate a Short Random Delay (0 to 25 frames)
     call getRandom
     mov ax, [randNum]
-    and ax, 31          
+    and ax, 25          ; Smaller number = More bullets falling!
+    ; We return the delay value in AX to be saved into the array
     ret
 endp spawnBullet
 
@@ -205,186 +111,67 @@ proc spawnAllBullets
     mov cx, MAX_BULLETS
     mov si, 0
 spawnLoop:
-    call spawnBullet      
-    mov [bulDelay + si], ax 
+    call spawnBullet      ; Sets X/Y and returns delay in AX
+    mov [bulDelay + si], ax
     mov ax, [bulletX]
-    mov [bulX + si], ax   
+    mov [bulX + si], ax
     mov ax, [bulletY]
-    mov [bulY + si], ax   
-    add si, 2             
+    mov [bulY + si], ax
+    
+    add si, 2
     loop spawnLoop
     pop si cx
     ret
 endp spawnAllBullets
 
-; --------------------------------------------------------
-; PHYSICS ENGINE
-; --------------------------------------------------------
 proc handleAllBullets
     push cx si
     mov cx, MAX_BULLETS
     mov si, 0
 bulletLoop:
+    ; --- Check if bullet is still "waiting" to fall ---
     cmp [bulDelay + si], 0
-    jbe startPhysics
-    dec [bulDelay + si]
-    jmp nextBul           
+    jbe startFalling      
+    dec [bulDelay + si]   ; Count down the delay
+    jmp nextBul           ; Skip this bullet until timer hits 0
 
-startPhysics:
+startFalling:
     mov ax, [bulX + si]
     mov [bulletX], ax
     mov ax, [bulY + si]
     mov [bulletY], ax
-    call eraseAttack      
 
-    mov ax, 0
-    mov al, [currentWave]
-    and ax, 3
-    cmp ax, 0
-    je doBounce
-    cmp ax, 1
-    je doHome
-    cmp ax, 2
-    je doSweep
-    cmp ax, 3
-    je doRain
+    call eraseAttack
 
-doBounce:
-    mov ax, [bulX + si]
-    add ax, [bulDX + si]
-    mov [bulX + si], ax
-    
+    ; Move down by a fixed speed of 2
+    mov ax, [bulletSpeed] 
+    add [bulY + si], ax
     mov ax, [bulY + si]
-    add ax, [bulDY + si]
-    mov [bulY + si], ax
-    
-    mov ax, [bulX + si]
-    cmp ax, 14
-    jle revX
-    cmp ax, 303
-    jge revX
-    jmp checkBY
-revX:
-    mov ax, [bulDX + si]
-    neg ax
-    mov [bulDX + si], ax
-checkBY:
-    mov ax, [bulY + si]
-    cmp ax, 14
-    jle revY
-    cmp ax, 145
-    jge revY
-    jmp applyMove
-revY:
-    mov ax, [bulDY + si]
-    neg ax
-    mov [bulDY + si], ax
-    jmp applyMove
+    mov [bulletY], ax
 
-doHome:
-    mov ax, [bowlX]
-    cmp ax, [bulX + si]
-    jg homeIncX
-    jl homeDecX
-    jmp homeY
-homeIncX:
-    mov ax, [bulX + si]
-    add ax, 1
-    mov [bulX + si], ax
-    jmp homeY
-homeDecX:
-    mov ax, [bulX + si]
-    sub ax, 1
-    mov [bulX + si], ax
-homeY:
-    mov ax, [bowlY]
-    cmp ax, [bulY + si]
-    jg homeIncY
-    jl homeDecY
-    jmp applyMove
-homeIncY:
-    mov ax, [bulY + si]
-    add ax, 1
-    mov [bulY + si], ax
-    jmp applyMove
-homeDecY:
-    mov ax, [bulY + si]
-    sub ax, 1
-    mov [bulY + si], ax
-    jmp applyMove
+    call checkCollision
+    cmp al, 1
+    je resetOne
 
-doSweep:
-    mov ax, [bulX + si]
-    add ax, [bulDX + si]
-    mov [bulX + si], ax
-    cmp ax, 303
-    jge resetParticle
-    jmp applyMove
-
-doRain:
     mov ax, [bulY + si]
-    add ax, [bulDY + si]
-    mov [bulY + si], ax
-    cmp ax, 145
-    jge resetParticle
-    jmp applyMove
+    cmp ax, [arenaMaxY]
+    jge resetOne
 
-resetParticle:
-    call spawnBullet
-    mov ax, [bulletX]
-    mov [bulX + si], ax
-    mov ax, [bulletY]
-    mov [bulY + si], ax
+    call drawAttack
     jmp nextBul
 
-applyMove:
-    mov ax, [bulX + si]
-    mov [bulletX], ax
-    mov ax, [bulY + si]
-    mov [bulletY], ax
-    
-    call checkCollision   
-    cmp al, 1
-    je forceReset
-    
-    call checkWalls
-    cmp al, 1
-    je forceReset
-    jmp drawB
-
-forceReset:
-    call spawnBullet
+resetOne:
+    call eraseAttack
+    call spawnBullet      ; Returns new X and a new short Delay in AX
     mov [bulDelay + si], ax
     mov ax, [bulletX]
     mov [bulX + si], ax
     mov ax, [bulletY]
     mov [bulY + si], ax
 
-drawB:
-    call drawAttack       
-
 nextBul:
-    add si, 2             
-    loop bulletLoop       
+    add si, 2
+    loop bulletLoop
     pop si cx
     ret
 endp handleAllBullets
-
-; --------------------------------------------------------
-; ANTI-CRASH HOOKS (In case old wave timers call them)
-; --------------------------------------------------------
-proc execMoveRight
-    ret
-endp execMoveRight
-
-proc execMoveLeft
-    ret
-endp execMoveLeft
-
-proc execMoveUp
-    ret
-endp execMoveUp
-
-proc execMoveDown
-    ret
-endp execMoveDown
