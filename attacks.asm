@@ -5,6 +5,13 @@
 ; =========================================
 
 proc pickAttackPattern
+	; --- NEW: BOSS WAVE OVERRIDES ---
+    cmp [WAVE_LEVEL], 12
+    je forceBossWave1       ; Wave 12 = Falling Bullets
+    cmp [WAVE_LEVEL], 13
+    je forceBossWave2       ; Wave 13 = Chaos (pSix)
+    ; --------------------------------
+	
     call getRandom
     mov ax, [randNum]
     
@@ -36,14 +43,17 @@ proc pickAttackPattern
     cmp dl, 5
     je pFive
 
-pSix:                   ; PATTERN 6: CHAOS (3 Down, 3 Up, 2 Left, 2 Right)
+pSix:                   ; BOSS PHASE 2: CHAOS (3 from all 4 sides = 12 total)
     mov [activeDown], 3
     mov [activeUp], 3
-    mov [activeLeft], 2
-    mov [activeRight], 2
+    mov [activeLeft], 3
+    mov [activeRight], 3
     ret
-pZero:                  ; PATTERN 0: ONLY FALLING
-    mov [activeDown], 10
+pZero:                  ; BOSS PHASE 1: FALLING (12 total)
+    mov [activeDown], 12
+    mov [activeUp], 0
+    mov [activeLeft], 0
+    mov [activeRight], 0
     ret
 pOne:                   ; PATTERN 1: ONLY RISING
     mov [activeUp], 10
@@ -62,6 +72,12 @@ pFive:                  ; PATTERN 5: HORIZONTAL COMBO
     mov [activeLeft], 5
     mov [activeRight], 5
     ret
+	
+	; --- Boss Jump Helpers ---
+forceBossWave1:
+    jmp pZero
+forceBossWave2:
+    jmp pSix
 endp pickAttackPattern
 
 proc drawAttack
@@ -382,12 +398,12 @@ proc beepSound
     mov ax, 40h
     mov es, ax
     mov bx, 6Ch
-    mov eax, es:[bx]    ; Get current BIOS tick
+    mov eax, [es:bx]    ; Get current BIOS tick
     mov cx, 65000       ; <--- SAFETY COUNTER: Prevents infinite freeze!
     
 wait_tick:
     call pollAudio      
-    cmp eax, es:[bx]
+    cmp eax, [es:bx]
     jne end_beep        ; If tick changed normally, jump to end!
     
     dec cx              ; Subtract 1 from safety counter

@@ -48,3 +48,16 @@ proc drawSquare
 ret
 endp drawSquare
  
+proc eraseBowl
+    push ax
+    mov ax, [itemX]     ; Uses the previous position
+    mov [x], ax
+    mov ax, [itemY]     
+    mov [y], ax
+    mov [wid], 16       ; Matches your heart size
+    mov [height], 16    
+    mov [color], 0      ; Black color erases the heart
+    call drawRectangle
+    pop ax
+    ret
+endp eraseBowl
