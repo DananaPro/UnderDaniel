@@ -1,3 +1,11 @@
+; --------------------------
+; attacks.asm (inlined & corrected)
+; - bullet size changed to 7x7 on boss waves
+; - MAX_BULLETS usage matches DATASEG (12)
+; - boss waves forced to 12 and 13
+; - spawn/position math adjusted for 7px bullets
+; --------------------------
+
 ; =========================================
 ; attacks.asm
 ; Handles bullet generation, movement, 
@@ -5,21 +13,21 @@
 ; =========================================
 
 proc pickAttackPattern
-	; --- NEW: BOSS WAVE OVERRIDES ---
+    ; --- BOSS WAVE OVERRIDES ---
     cmp [WAVE_LEVEL], 12
     je forceBossWave1       ; Wave 12 = Falling Bullets
     cmp [WAVE_LEVEL], 13
     je forceBossWave2       ; Wave 13 = Chaos (pSix)
     ; --------------------------------
-	
+
     call getRandom
     mov ax, [randNum]
-    
+
     ; Break the RNG Sync Loop
     add ax, [bowlX]
     xor ah, ah
     add al, [WAVE_LEVEL]
-    
+
     xor dx, dx
     mov bx, 7           ; Now dividing by 7 for 7 different wave types!
     div bx              ; The remainder (dx) will be 0 to 6
@@ -72,22 +80,44 @@ pFive:                  ; PATTERN 5: HORIZONTAL COMBO
     mov [activeLeft], 5
     mov [activeRight], 5
     ret
-	
-	; --- Boss Jump Helpers ---
+
+    ; --- Boss Jump Helpers ---
 forceBossWave1:
     jmp pZero
 forceBossWave2:
     jmp pSix
 endp pickAttackPattern
 
+; =========================================
+; Drawing / Erasing Bullets
+; =========================================
+
 proc drawAttack
     mov ax, [bulletX]
     mov [x], ax
     mov ax, [bulletY]
     mov [y], ax
-    mov [wid], 5
-    mov [height], 5
-    mov [color], 255    
+
+    ; If boss waves (12 or 13) use 7x7, else 5x5
+    mov al, [WAVE_LEVEL]
+    cmp al, 12
+    jb normalSize
+    cmp al, 13
+    ja normalSize
+
+    ; boss wave → 7x7
+    mov ax, bulletWid
+    mov [wid], ax
+    mov [height], ax
+    jmp doDraw
+
+normalSize:
+    mov ax, 5
+    mov [wid], ax
+    mov [height], ax
+
+doDraw:
+    mov [color], 255
     call drawRectangle
     ret
 endp drawAttack
@@ -97,35 +127,88 @@ proc eraseAttack
     mov [x], ax
     mov ax, [bulletY]
     mov [y], ax
-    mov [wid], 5
-    mov [height], 5
-    mov [color], 0      
+
+    ; Match erase size to draw size
+    mov al, [WAVE_LEVEL]
+    cmp al, 12
+    jb normalErase
+    cmp al, 13
+    ja normalErase
+
+    mov ax, bulletWid
+    mov [wid], ax
+    mov [height], ax
+    jmp doErase
+
+normalErase:
+    mov ax, 5
+    mov [wid], ax
+    mov [height], ax
+
+doErase:
+    mov [color], 0
     call drawRectangle
     ret
 endp eraseAttack
 
+; =========================================
+; Collision
+; =========================================
+
 proc checkCollision
+    ; -----------------------------
+    ; X‑axis collision (5 or 7 px)
+    ; -----------------------------
     mov ax, [bulletX]
-    add ax, 5
+    mov bl, [WAVE_LEVEL]
+    cmp bl, 12
+    jb x_use5
+    cmp bl, 13
+    ja x_use5
+    add ax, 7           ; boss waves → 7
+    jmp x_done
+x_use5:
+    add ax, 5           ; normal waves → 5
+x_done:
     cmp ax, [bowlX]
     jl safe
+
     mov ax, [bulletX]
     mov bx, [bowlX]
     add bx, 16
     cmp ax, bx
     jg safe
+
+    ; -----------------------------
+    ; Y‑axis collision (5 or 7 px)
+    ; -----------------------------
     mov ax, [bulletY]
-    add ax, 5
+    mov bl, [WAVE_LEVEL]
+    cmp bl, 12
+    jb y_use5
+    cmp bl, 13
+    ja y_use5
+    add ax, 7           ; boss waves → 7
+    jmp y_done
+y_use5:
+    add ax, 5           ; normal waves → 5
+y_done:
     cmp ax, [bowlY]
     jl safe
+
     mov ax, [bulletY]
     mov bx, [bowlY]
     add bx, 16
     cmp ax, bx
     jg safe
+
+    ; -----------------------------
+    ; COLLISION OCCURRED
+    ; -----------------------------
     call takeDamage
     mov al, 1
     ret
+
 safe:
     mov al, 0
     ret
@@ -133,7 +216,7 @@ endp checkCollision
 
 proc takeDamage
     call eraseAttack    ; Erases the bullet (but leaves a black square!)
-    call drawBowl       ; <--- THE FIX: Redraw the player immediately!
+    call drawBowl       ; Redraw the player immediately
     call beepSound      ; Play the crunch sound safely
     sub [hp], 4         
     cmp [hp], 0         
@@ -154,7 +237,7 @@ proc spawnBullet
     xor dx, dx
     mov bx, [arenaMaxX]
     sub bx, [arenaMinX]
-    sub bx, 5
+    sub bx, 7            ; account for bullet width
     div bx
     add dx, [arenaMinX]
     mov [bulletX], dx
@@ -261,7 +344,6 @@ endEraseDown:
     ret
 endp eraseAllBullets
 
-
 ; =========================================
 ; RISING BULLETS (BOTTOM TO TOP)
 ; =========================================
@@ -272,7 +354,7 @@ proc spawnUpBullet
     xor dx, dx
     mov bx, [arenaMaxX]
     sub bx, [arenaMinX]
-    sub bx, 5
+    sub bx, 7
     div bx
     add dx, [arenaMinX]
     mov [bulletX], dx
@@ -379,6 +461,10 @@ endEraseUp:
     ret
 endp eraseAllUpBullets
 
+; =========================================
+; Beep Sound (PC Speaker)
+; =========================================
+
 proc beepSound
     pusha
     ; 1. Configure PC Speaker
@@ -388,7 +474,7 @@ proc beepSound
     out 42h, al
     mov al, ah
     out 42h, al
-    
+
     ; 2. Turn ON Speaker
     in al, 61h
     or al, 3
@@ -400,12 +486,12 @@ proc beepSound
     mov bx, 6Ch
     mov eax, [es:bx]    ; Get current BIOS tick
     mov cx, 65000       ; <--- SAFETY COUNTER: Prevents infinite freeze!
-    
+
 wait_tick:
     call pollAudio      
     cmp eax, [es:bx]
     jne end_beep        ; If tick changed normally, jump to end!
-    
+
     dec cx              ; Subtract 1 from safety counter
     jnz wait_tick       ; Keep waiting ONLY if cx is not 0
 
@@ -414,7 +500,7 @@ end_beep:
     in al, 61h
     and al, 0FCh
     out 61h, al
-    
+
     popa
     ret
 endp beepSound
@@ -426,7 +512,7 @@ endp beepSound
 proc spawnLeftBullet
     ; 1. Start safely INSIDE the left wall
     mov ax, [arenaMinX]
-    add ax, 8
+    add ax, 10
     mov [bulletX], ax
 
     ; 2. Random Y between Top and Bottom
@@ -435,7 +521,7 @@ proc spawnLeftBullet
     xor dx, dx
     mov bx, [arenaMaxY]
     sub bx, [arenaMinY]
-    sub bx, 5
+    sub bx, 7
     div bx
     add dx, [arenaMinY]
     mov [bulletY], dx
@@ -496,11 +582,11 @@ startMovingRight:
     call checkCollision
     cmp al, 1
     je resetLeftOne
-	
-	; --- BOUNDARY CHECK ---
+
+    ; --- BOUNDARY CHECK ---
     mov ax, [leftBulX + si]
     mov bx, [arenaMaxX]
-    sub bx, 8           ; <--- Stop 6 pixels before touching the right wall!
+    sub bx, 10           ; Stop before touching the right wall
     cmp ax, bx
     jge resetLeftOne
     ; --------------------------
@@ -548,7 +634,6 @@ endEraseLeft:
     ret
 endp eraseAllLeftBullets
 
-
 ; =========================================
 ; RIGHT-TO-LEFT BULLETS
 ; =========================================
@@ -556,7 +641,7 @@ endp eraseAllLeftBullets
 proc spawnRightBullet
     ; 1. Start safely INSIDE the right wall
     mov ax, [arenaMaxX]
-    sub ax, 8
+    sub ax, 10
     mov [bulletX], ax
 
     ; 2. Random Y between Top and Bottom
@@ -565,7 +650,7 @@ proc spawnRightBullet
     xor dx, dx
     mov bx, [arenaMaxY]
     sub bx, [arenaMinY]
-    sub bx, 5
+    sub bx, 7
     div bx
     add dx, [arenaMinY]
     mov [bulletY], dx
@@ -626,11 +711,11 @@ startMovingLeft:
     call checkCollision
     cmp al, 1
     je resetRightOne
-	
-; --- BOUNDARY CHECK ---
+
+    ; --- BOUNDARY CHECK ---
     mov ax, [rightBulX + si]
     mov bx, [arenaMinX]
-    add bx, 8           ; <--- Stop 6 pixels before touching the left wall!
+    add bx, 10           ; Stop before touching the left wall
     cmp ax, bx
     jle resetRightOne
     ; --------------------------
@@ -677,3 +762,7 @@ endEraseRight:
     pop si cx
     ret
 endp eraseAllRightBullets
+
+; =========================================
+; End of inlined attacks.asm
+; =========================================
