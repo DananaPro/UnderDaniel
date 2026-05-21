@@ -373,6 +373,7 @@ doMoveDown:
 ; STORY TRANSITIONS & MINI-GAME
 ; =========================================
 goSpooky1:
+	call stopStreamingAudio
     mov [STORY_STATE], 1
     mov [currentFile], offset spookyFile
     jmp setupSpookyRoom
@@ -453,7 +454,7 @@ spookyMoveUp:
 
     ; 6. CHECK IF AT DOOR (Y=70)
     cmp [bowlY], 70              
-    jle spookyDoorReached
+    jle spookyDoorReached   
     jmp spookyLoop
 
 spookyDoorReached:

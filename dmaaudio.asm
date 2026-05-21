@@ -83,17 +83,12 @@ proc sb_irq_handler
 endp sb_irq_handler
 
 proc playStreamingAudio
-    mov [currentAudioName], dx  ; Save filename in case we need to recover it
+    mov [currentAudioName], dx  
 
-    call stopStreamingAudio
+    ; --- PROPER CLEANUP ---
+    ; Only stop the specific audio handle, do NOT sweep-close all handles
+    call stopStreamingAudio 
 
-    mov bx, 5           ; MS-DOS user file handles start at 5
-force_close:
-    mov ah, 3Eh         ; DOS Close File API
-    int 21h
-    inc bx
-    cmp bx, 15          ; Max handles is 15
-    jle force_close
     ; ---------------------------------------------------------------
 
     mov ax, 3D00h
@@ -190,6 +185,9 @@ force_close:
 endp playStreamingAudio
 
 proc pollAudio
+    ; If no file is playing, return immediately to keep the loop moving
+    cmp [audioFileHandle], 0
+    je @done
     pusha                 ; Protect the main game's math from corruption!
     
     cmp [needsFill], 1
@@ -257,7 +255,8 @@ file_error:
     mov [audioFileHandle], ax
 
 pollDone:
-    popa                  ; Restore the game's math
+    popa
+@done:
     ret
 endp pollAudio
 
@@ -270,20 +269,18 @@ proc stopStreamingAudio
     mov al, 0D3h
     call writeDSP
 
-    cli                 ; Lock CPU while unhooking
-    push ds
-    mov ax, 250Fh
-    mov ds, [oldIRQSeg]
-    mov dx, [oldIRQOff]
-    int 21h
-    pop ds
-    sti                 ; Unlock CPU
+    ; --------------------------------------------------------
+    ; WE DELETED THE 'cli' TO 'sti' UNHOOKING BLOCK HERE!
+    ; We must leave the handler attached so it safely absorbs
+    ; the final delayed interrupt from the Sound Blaster.
+    ; --------------------------------------------------------
 
     mov ah, 3Eh
     mov bx, [audioFileHandle]
     int 21h
     
     mov [audioFileHandle], 0
+    mov [needsFill], 0      ; Clear any pending buffer fills!
 skipStop:
     ret
 endp stopStreamingAudio
