@@ -71,7 +71,7 @@ arenaMaxY   dw 150
 ; --------------------------
 waveTimer   dw 0        
 isBreak     db 0        ; 0 = Attacking, 1 = Break Time
-WAVE_LEVEL  db 10        ; Start at wave 1
+WAVE_LEVEL  db 1        ; Start at wave 1
 BEST_WAVE   db 1
 CHECKPOINT      db 1        ; Saves your progress!
 STORY_STATE     db 0        ; Tracks which spooky room you are in (1 = Pre-Boss, 2 = Post-Boss)    
@@ -260,6 +260,18 @@ mainLoop:
     call eraseAllLeftBullets
     call eraseAllRightBullets
     inc [WAVE_LEVEL]
+	
+	; ---------------------------------------------------
+    ; NEW: Add 4 HP and cap it at 20!
+    ; ---------------------------------------------------
+    mov al, [hp]
+    add al, 4
+    cmp al, 20
+    jle @applyHeal
+    mov al, 20          ; Cap at 20 if it went over
+@applyHeal:
+    mov [hp], al
+    ; ---------------------------------------------------
 
     cmp [WAVE_LEVEL], 11     ; Did we just beat Wave 10?
     je triggerSpooky1
@@ -467,6 +479,7 @@ spookyDoorReached:
 
 goBossDialogue:
     mov [WAVE_LEVEL], 12    ; Force the wave to 12
+    mov [hp], 20
     mov [isFreezing], 1     ; Stop mainLoop logic during dialogue
     mov [currentFile], offset bossRmFile
     call showbmp
