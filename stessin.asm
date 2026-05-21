@@ -107,6 +107,7 @@ oldHp          db 255      ; Tracks when HP changes
 oldWave        db 255      ; Tracks when Wave changes
 
 hpMsg          db 'HP: $'
+ziltoidName db 'ZILTOID', '$'
 
 ; --- File Variables ---
 startfile       db 'intro.bmp',0 
@@ -379,6 +380,7 @@ goSpooky1:
     jmp setupSpookyRoom
 
 goSpooky2:
+	call stopStreamingAudio
     mov [STORY_STATE], 2
     mov [currentFile], offset spookyFile2
     jmp setupSpookyRoom
@@ -733,6 +735,11 @@ proc drawHealthBar
     mov dl, 27          
     int 10h
 
+    ; --- CHECK FOR BOSS WAVE ---
+    cmp [WAVE_LEVEL], 12
+    jge @drawZiltoid    ; If Wave 12 or higher, jump to boss text
+
+    ; --- NORMAL WAVE TEXT ---
     mov bl, 10          ; Light Green
     mov ah, 2
     mov dl, 'W'
@@ -763,6 +770,16 @@ proc drawHealthBar
     mov dl, al
     mov ah, 2
     int 21h
+
+    jmp @doneWaveText   ; Skip the boss text!
+
+@drawZiltoid:
+    ; --- BOSS WAVE TEXT ---
+    mov dx, offset ziltoidName
+    mov ah, 09h
+    int 21h
+
+@doneWaveText:
 
     ; -----------------------------------------
     ; 2. Print Current HP Text
